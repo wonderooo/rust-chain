@@ -1,7 +1,7 @@
-use rust_chain::{Blockchain, Blockchainable};
 use std::fmt::Display;
 
 use clap::Parser;
+use rust_chain::{blockchain::Blockchain, Blockchainable};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
