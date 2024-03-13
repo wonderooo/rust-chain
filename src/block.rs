@@ -1,32 +1,38 @@
-use std::{fmt::Display, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    fmt::Display,
+    marker::PhantomData,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
-use crate::{pow::ProofOfWork, Blockchainable};
+use crate::{pow::ProofOfWork, transaction::Transaction, Blockchainable};
 
 #[derive(Serialize, Deserialize)]
 pub struct Block<T> {
     pub timestamp: SystemTime,
-    pub data: T,
+    pub transactions: Vec<Transaction>,
     #[serde(with = "serde_bytes")]
     pub previous_block_hash: Option<ByteBuf>,
     #[serde(with = "serde_bytes")]
     pub hash: Option<ByteBuf>,
     pub nonce: Option<u64>,
+    phantom: PhantomData<T>,
 }
 
 impl<T> Block<T> {
-    pub fn new(data: T, previous_block_hash: Option<ByteBuf>) -> Self
+    pub fn new(transactions: Vec<Transaction>, previous_block_hash: Option<ByteBuf>) -> Self
     where
         T: Blockchainable,
     {
         let mut block = Block {
             timestamp: SystemTime::now(),
-            data,
+            transactions,
             previous_block_hash: previous_block_hash,
             hash: None,
             nonce: None,
+            phantom: PhantomData,
         };
 
         let pow = ProofOfWork::new(&block);
@@ -45,7 +51,10 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Block")?;
-        writeln!(f, "\tDATA: {}", self.data)?;
+        writeln!(f, "\tDATA:")?;
+        for (idx, t) in self.transactions.iter().enumerate() {
+            writeln!(f, "\t\tTX {idx}: {:?}", t)?;
+        }
         writeln!(
             f,
             "\tTIMESTAMP (NANOS): {}",

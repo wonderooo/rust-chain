@@ -1,10 +1,14 @@
-use std::marker::PhantomData;
+use std::{collections::HashMap, marker::PhantomData};
 
 use bincode::{deserialize, serialize};
 use serde_bytes::ByteBuf;
 use sled::Db;
 
-use crate::{block::Block, Blockchainable};
+use crate::{
+    block::Block,
+    transaction::{TXOutput, Transaction},
+    Blockchainable,
+};
 
 pub struct Blockchain<T> {
     pub tip: ByteBuf,
@@ -15,8 +19,10 @@ pub struct Blockchain<T> {
 impl<T> Blockchain<T> {
     pub const DB_FILE: &'static str = "blockchain.kv";
     pub const BLOCKS_BUCKET: &'static str = "blocks";
+    const GENESIS_COINBASE: &'static str =
+        "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks";
 
-    pub fn new() -> Self
+    pub fn new(address: &String) -> Self
     where
         T: Blockchainable,
     {
@@ -28,7 +34,13 @@ impl<T> Blockchain<T> {
         let tip = if let Some(lh) = last_hash {
             ByteBuf::from(lh.to_vec())
         } else {
-            let genesis_block = Block::new(T::genesis_data(), None);
+            let genesis_block = Block::<T>::new(
+                vec![Transaction::new_coinbase_tx(
+                    &address,
+                    &Self::GENESIS_COINBASE.to_string(),
+                )],
+                None,
+            );
             if let Some(hash) = &genesis_block.hash {
                 blocks
                     .insert(
@@ -52,7 +64,7 @@ impl<T> Blockchain<T> {
         }
     }
 
-    pub fn add_block(&mut self, data: T)
+    pub fn add_block(&mut self, data: Vec<Transaction>)
     where
         T: Blockchainable,
     {
@@ -65,7 +77,7 @@ impl<T> Blockchain<T> {
             .expect("Get value error!")
             .map(|v| ByteBuf::from(v.to_vec()));
 
-        let new_block = Block::new(data, last_hash);
+        let new_block = Block::<T>::new(data, last_hash);
         if let Some(hash) = &new_block.hash {
             blocks
                 .insert(hash, serialize(&new_block).expect("Serialization error"))
@@ -86,6 +98,111 @@ impl<T> Blockchain<T> {
                 blocks.remove(key).expect("Could not remove key!");
             }
         })
+    }
+
+    pub fn find_unspent_txs(&mut self, address: &String) -> Vec<Transaction>
+    where
+        T: Blockchainable,
+    {
+        let mut spent_txos: HashMap<ByteBuf, Vec<usize>> = HashMap::new();
+        let mut unspent_txs: Vec<Transaction> = Vec::new();
+
+        for block in self {
+            for tx in block.transactions {
+                'outs: for (this_idx, vout) in tx.vout.iter().enumerate() {
+                    if let Some(indicies) = spent_txos.get(&tx.id) {
+                        for idx in indicies {
+                            if *idx == this_idx {
+                                continue 'outs;
+                            }
+                        }
+                    }
+
+                    if vout.can_be_unlocked_with(address) {
+                        unspent_txs.push(tx.clone());
+                    }
+                }
+
+                if !tx.is_coinbase() {
+                    for vin in &tx.vin {
+                        if vin.can_unlock_output_with(address) {
+                            if let Some(indicies) = spent_txos.get_mut(&vin.txid) {
+                                indicies.push(vin.vout.expect("How tf!"));
+                            } else {
+                                spent_txos.insert(vin.txid.clone(), vec![vin.vout.expect("How tf!")]);
+                            }
+                        }
+                    }
+                }
+
+                if let Some(ref ph) = block.previous_block_hash {
+                    if ph.len() == 0 {
+                        break;
+                    }
+                }
+            }
+        }
+
+        unspent_txs
+    }
+
+    pub fn find_utxo(&mut self, address: &String) -> Vec<TXOutput>
+    where
+        T: Blockchainable,
+    {
+        self.find_unspent_txs(address)
+            .iter()
+            .flat_map(|utx| utx.vout.clone())
+            .filter(|txo| txo.can_be_unlocked_with(address))
+            .collect()
+    }
+
+    pub fn balance_at(&mut self, address: &String) -> u64
+    where
+        T: Blockchainable,
+    {
+        let f = self.find_utxo(address);
+        // println!("{:?}", f);
+        f
+            .iter()
+            .fold(0, |acc, utxo| utxo.value + acc)
+    }
+
+    pub fn send(&mut self, from: &String, to: &String, value: u64) where T: Blockchainable {
+        let tx = Transaction::new_tx(to, from, value, self);
+        self.add_block(vec![tx]);
+    }
+
+    pub fn find_spendable_outputs(
+        &mut self,
+        address: &String,
+        value: u64,
+    ) -> (u64, HashMap<ByteBuf, Vec<usize>>)
+    where
+        T: Blockchainable,
+    {
+        let mut unspent_outputs: HashMap<ByteBuf, Vec<usize>> = HashMap::new();
+        let unspent_tx = self.find_unspent_txs(address);
+        let mut all = 0;
+
+        'outer: for tx in unspent_tx {
+            for (idx, vout) in tx.vout.iter().enumerate() {
+                if vout.can_be_unlocked_with(address) && all < value {
+                    all += vout.value;
+                    if let Some(indicies) = unspent_outputs.get_mut(&tx.id) {
+                        indicies.push(idx);
+                    } else {
+                        unspent_outputs.insert(tx.id.clone(), vec![idx]);
+                    }
+
+                    if all >= value {
+                        break 'outer;
+                    }
+                }
+            }
+        }
+
+        (all, unspent_outputs)
     }
 }
 

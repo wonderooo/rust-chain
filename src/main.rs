@@ -35,9 +35,13 @@ struct Args {
 #[derive(Debug, clap::Args)]
 #[group(required = true, multiple = false)]
 struct ArgGroup {
-    /// Add block to blockchain with provided content
+    /// Create new blockchain with given address
     #[arg(short, long)]
-    add_block: Option<String>,
+    create_blockchain: Option<String>,
+
+    /// Add block to blockchain with provided content
+    // #[arg(short, long)]
+    // add_block: Option<String>,
 
     /// Print all blocks in blockchain
     #[arg(short, long)]
@@ -46,24 +50,47 @@ struct ArgGroup {
     /// Remove all blocks in blockchain
     #[arg(short, long)]
     remove_blocks: bool,
+
+    /// Get balance at specified address
+    #[arg(short, long)]
+    balance: Option<String>,
+
+    #[arg(short, long, num_args = 3)]
+    send: Option<Vec<String>>
 }
 
 fn main() {
     let args = Args::parse();
-    if let Some(content) = args.group.add_block {
-        let mut blockchain = Blockchain::<Data>::new();
-        blockchain.add_block(Data { field: content });
-    }
+    // if let Some(content) = args.group.add_block {
+    // let blockchain = Blockchain::<Data>::new(content);
+    // blockchain.add_block(Data { field: content });
+    // }
 
     if args.group.print {
-        let blockchain = Blockchain::<Data>::new();
+        // TODO: Make address optional
+        let blockchain = Blockchain::<Data>::new(&"".to_string());
         for block in blockchain {
             println!("{}", block);
         }
     }
 
     if args.group.remove_blocks {
-        let blockchain = Blockchain::<Data>::new();
+        let blockchain = Blockchain::<Data>::new(&"".to_string());
         blockchain.remove_blocks();
+    }
+
+    if let Some(addr) = args.group.create_blockchain {
+        Blockchain::<Data>::new(&addr);
+    }
+
+    if let Some(addr) = args.group.balance {
+        let mut blockchain = Blockchain::<Data>::new(&"".to_string());
+        let balance = blockchain.balance_at(&addr);
+        println!("Balance at {}: {}", &addr, balance);
+    }
+
+    if let Some(v) = args.group.send {
+        let mut blockchain = Blockchain::<Data>::new(&"".to_string());
+        blockchain.send(&v[0], &v[1], v[2].parse::<u64>().expect("Provided value is not a number!"));
     }
 }

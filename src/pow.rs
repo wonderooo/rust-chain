@@ -1,7 +1,7 @@
 use bincode::serialize;
 use num_bigint::BigUint;
 use serde_bytes::ByteBuf;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 use crate::{block::Block, Blockchainable};
 
@@ -33,7 +33,7 @@ where
     }
 
     pub fn run(&self) -> Option<(u64, ByteBuf)> {
-        println!("Mining for data: {}", self.block.data);
+        println!("Mining");
         let mut nonce = 0;
         while nonce < u64::MAX {
             let data = self.prepare_data(nonce);
