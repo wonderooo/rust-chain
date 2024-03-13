@@ -56,15 +56,11 @@ struct ArgGroup {
     balance: Option<String>,
 
     #[arg(short, long, num_args = 3)]
-    send: Option<Vec<String>>
+    send: Option<Vec<String>>,
 }
 
 fn main() {
     let args = Args::parse();
-    // if let Some(content) = args.group.add_block {
-    // let blockchain = Blockchain::<Data>::new(content);
-    // blockchain.add_block(Data { field: content });
-    // }
 
     if args.group.print {
         // TODO: Make address optional
@@ -91,6 +87,11 @@ fn main() {
 
     if let Some(v) = args.group.send {
         let mut blockchain = Blockchain::<Data>::new(&"".to_string());
-        blockchain.send(&v[0], &v[1], v[2].parse::<u64>().expect("Provided value is not a number!"));
+        blockchain.send(
+            &v[0],
+            &v[1],
+            v[2].parse::<u64>()
+                .expect("Provided value is not a number!"),
+        );
     }
 }

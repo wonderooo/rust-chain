@@ -129,7 +129,8 @@ impl<T> Blockchain<T> {
                             if let Some(indicies) = spent_txos.get_mut(&vin.txid) {
                                 indicies.push(vin.vout.expect("How tf!"));
                             } else {
-                                spent_txos.insert(vin.txid.clone(), vec![vin.vout.expect("How tf!")]);
+                                spent_txos
+                                    .insert(vin.txid.clone(), vec![vin.vout.expect("How tf!")]);
                             }
                         }
                     }
@@ -162,13 +163,13 @@ impl<T> Blockchain<T> {
         T: Blockchainable,
     {
         let f = self.find_utxo(address);
-        // println!("{:?}", f);
-        f
-            .iter()
-            .fold(0, |acc, utxo| utxo.value + acc)
+        f.iter().fold(0, |acc, utxo| utxo.value + acc)
     }
 
-    pub fn send(&mut self, from: &String, to: &String, value: u64) where T: Blockchainable {
+    pub fn send(&mut self, from: &String, to: &String, value: u64)
+    where
+        T: Blockchainable,
+    {
         let tx = Transaction::new_tx(to, from, value, self);
         self.add_block(vec![tx]);
     }

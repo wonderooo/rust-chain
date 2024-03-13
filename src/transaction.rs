@@ -44,7 +44,7 @@ impl Transaction {
     pub fn new_tx<T>(to: &String, from: &String, value: u64, blockchain: &mut Blockchain<T>) -> Self
     where
         T: Blockchainable,
-    {   
+    {
         let mut vin = Vec::new();
         let mut vout = Vec::new();
 
@@ -54,16 +54,31 @@ impl Transaction {
         }
 
         for (txid, out_idx) in valid_outputs {
-            out_idx.iter()
-                .for_each(|idx| vin.push(TXInput { txid: txid.clone(), vout: Some(*idx), script_sig: from.clone() }))
+            out_idx.iter().for_each(|idx| {
+                vin.push(TXInput {
+                    txid: txid.clone(),
+                    vout: Some(*idx),
+                    script_sig: from.clone(),
+                })
+            })
         }
 
-        vout.push(TXOutput { value, script_pk: to.clone() });
+        vout.push(TXOutput {
+            value,
+            script_pk: to.clone(),
+        });
         if all > value {
-            vout.push(TXOutput { value: all - value, script_pk: from.clone() })
+            vout.push(TXOutput {
+                value: all - value,
+                script_pk: from.clone(),
+            })
         }
 
-        let mut tx = Self { id: ByteBuf::new(), vin, vout};
+        let mut tx = Self {
+            id: ByteBuf::new(),
+            vin,
+            vout,
+        };
         tx.set_id();
         tx
     }

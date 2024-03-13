@@ -53,7 +53,7 @@ where
         writeln!(f, "Block")?;
         writeln!(f, "\tDATA:")?;
         for (idx, t) in self.transactions.iter().enumerate() {
-            writeln!(f, "\t\tTX {idx}: {:?}", t)?;
+            writeln!(f, "\t\tTX {idx}: {t}")?;
         }
         writeln!(
             f,
