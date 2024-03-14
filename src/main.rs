@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use clap::Parser;
-use rust_chain::{blockchain::Blockchain, Blockchainable};
+use rust_chain::{blockchain::Blockchain, wallet::Wallet, Blockchainable};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -55,8 +55,13 @@ struct ArgGroup {
     #[arg(short, long)]
     balance: Option<String>,
 
+    /// Send coins from an account to another (from, to, value)
     #[arg(short, long, num_args = 3)]
     send: Option<Vec<String>>,
+
+    /// Get an valid bitcoin address
+    #[arg(short, long)]
+    address: bool,
 }
 
 fn main() {
@@ -92,6 +97,14 @@ fn main() {
             &v[1],
             v[2].parse::<u64>()
                 .expect("Provided value is not a number!"),
+        );
+    }
+
+    if args.group.address {
+        let address = Wallet::new().address();
+        println!(
+            "{}",
+            std::str::from_utf8(&address).expect("Could not create string address!")
         );
     }
 }

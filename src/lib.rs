@@ -6,6 +6,7 @@ pub mod block;
 pub mod blockchain;
 pub mod pow;
 pub mod transaction;
+pub mod wallet;
 
 pub trait Blockchainable: Serialize + DeserializeOwned + Display {
     fn genesis_data() -> Self;
