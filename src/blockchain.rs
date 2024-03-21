@@ -5,9 +5,7 @@ use serde_bytes::ByteBuf;
 use sled::Db;
 
 use crate::{
-    block::Block,
-    transaction::{TXOutput, Transaction},
-    Blockchainable,
+    block::Block, transaction::{TXOutput, Transaction}, wallet::Wallet, Blockchainable
 };
 
 pub struct Blockchain<T> {
@@ -100,7 +98,7 @@ impl<T> Blockchain<T> {
         })
     }
 
-    pub fn find_unspent_txs(&mut self, address: &String) -> Vec<Transaction>
+    pub fn find_unspent_txs(&mut self, address: &ByteBuf) -> Vec<Transaction>
     where
         T: Blockchainable,
     {
@@ -118,14 +116,14 @@ impl<T> Blockchain<T> {
                         }
                     }
 
-                    if vout.can_be_unlocked_with(address) {
+                    if vout.is_locked_with(address) {
                         unspent_txs.push(tx.clone());
                     }
                 }
 
                 if !tx.is_coinbase() {
                     for vin in &tx.vin {
-                        if vin.can_unlock_output_with(address) {
+                        if vin.uses_key(address) {
                             if let Some(indicies) = spent_txos.get_mut(&vin.txid) {
                                 indicies.push(vin.vout.expect("How tf!"));
                             } else {
@@ -147,22 +145,24 @@ impl<T> Blockchain<T> {
         unspent_txs
     }
 
-    pub fn find_utxo(&mut self, address: &String) -> Vec<TXOutput>
+    pub fn find_utxo(&mut self, address: &ByteBuf) -> Vec<TXOutput>
     where
         T: Blockchainable,
     {
         self.find_unspent_txs(address)
             .iter()
             .flat_map(|utx| utx.vout.clone())
-            .filter(|txo| txo.can_be_unlocked_with(address))
+            .filter(|txo| txo.is_locked_with(address))
             .collect()
     }
 
-    pub fn balance_at(&mut self, address: &String) -> u64
+    pub fn balance_at(&mut self, address: &ByteBuf) -> u64
     where
         T: Blockchainable,
     {
-        let f = self.find_utxo(address);
+        let pub_key_hash = bs58::decode(address).with_alphabet(bs58::Alphabet::BITCOIN).into_vec().expect("Address could not be decoded to base58!");
+        let pub_key_hash = ByteBuf::from(&pub_key_hash[1..pub_key_hash.len() - Wallet::CHECKSUM_LEN]);
+        let f = self.find_utxo(&pub_key_hash);
         f.iter().fold(0, |acc, utxo| utxo.value + acc)
     }
 
@@ -176,7 +176,7 @@ impl<T> Blockchain<T> {
 
     pub fn find_spendable_outputs(
         &mut self,
-        address: &String,
+        address: &ByteBuf,
         value: u64,
     ) -> (u64, HashMap<ByteBuf, Vec<usize>>)
     where
@@ -188,7 +188,7 @@ impl<T> Blockchain<T> {
 
         'outer: for tx in unspent_tx {
             for (idx, vout) in tx.vout.iter().enumerate() {
-                if vout.can_be_unlocked_with(address) && all < value {
+                if vout.is_locked_with(address) && all < value {
                     all += vout.value;
                     if let Some(indicies) = unspent_outputs.get_mut(&tx.id) {
                         indicies.push(idx);

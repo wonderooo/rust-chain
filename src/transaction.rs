@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use sha2::{Digest, Sha256};
 
-use crate::{blockchain::Blockchain, Blockchainable};
+use crate::{blockchain::Blockchain, wallet::{Wallet, Wallets}, Blockchainable};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Transaction {
@@ -24,13 +24,15 @@ impl Transaction {
         let txin = TXInput {
             txid: ByteBuf::new(),
             vout: None,
-            script_sig: data.clone(),
+            signature: ByteBuf::new(),
+            pub_key: ByteBuf::from(data.clone())
         };
 
-        let txout = TXOutput {
+        let mut txout = TXOutput {
             value: Self::SUBSIDY,
-            script_pk: to.clone(),
+            pub_key_hash: ByteBuf::new(),
         };
+        txout.lock(&ByteBuf::from(to.clone()));
 
         let mut tx = Transaction {
             id: ByteBuf::new(),
@@ -48,7 +50,10 @@ impl Transaction {
         let mut vin = Vec::new();
         let mut vout = Vec::new();
 
-        let (all, valid_outputs) = blockchain.find_spendable_outputs(from, value);
+        let wallets = Wallets::fetch_wallets();
+        let wallet = wallets.get(&ByteBuf::from(from.clone())).expect("Wallet with address not found!");
+        let pub_key_hash = Wallet::hash_pub_key(&wallet.public_key);
+        let (all, valid_outputs) = blockchain.find_spendable_outputs(&pub_key_hash, value);
         if all < value {
             panic!("Not enough coins!")
         }
@@ -58,20 +63,20 @@ impl Transaction {
                 vin.push(TXInput {
                     txid: txid.clone(),
                     vout: Some(*idx),
-                    script_sig: from.clone(),
+                    signature: ByteBuf::new(),
+                    pub_key: wallet.public_key.clone(),
                 })
             })
         }
 
-        vout.push(TXOutput {
-            value,
-            script_pk: to.clone(),
-        });
+        let mut txout_th = TXOutput { value, pub_key_hash: ByteBuf::new() };
+        txout_th.lock(&ByteBuf::from(to.clone()));
+        vout.push(txout_th);
+
         if all > value {
-            vout.push(TXOutput {
-                value: all - value,
-                script_pk: from.clone(),
-            })
+            let mut txout_rest = TXOutput { value: all - value, pub_key_hash: ByteBuf::new() };
+            txout_rest.lock(&ByteBuf::from(from.clone()));
+            vout.push(txout_rest);
         }
 
         let mut tx = Self {
@@ -109,13 +114,16 @@ pub struct TXInput {
     pub txid: ByteBuf,
     /// Index of output reference in connected tx
     pub vout: Option<usize>,
-    /// Provides data to be used in script_pk
-    pub script_sig: String,
+    /// TODO
+    pub signature: ByteBuf,
+    /// TODO
+    pub pub_key: ByteBuf,
 }
 
 impl TXInput {
-    pub fn can_unlock_output_with(&self, unlocking_data: &String) -> bool {
-        self.script_sig == *unlocking_data
+    pub fn uses_key(&self, pub_key_hash: &ByteBuf) -> bool {
+        let locking_hash = Wallet::hash_pub_key(&self.pub_key);
+        locking_hash == *pub_key_hash
     }
 }
 
@@ -123,12 +131,23 @@ impl TXInput {
 pub struct TXOutput {
     /// Like quantity of coins in the outputting tx
     pub value: u64,
-    /// "puzzle" to unlock coins in tx
-    pub script_pk: String,
+    /// TODO
+    pub pub_key_hash: ByteBuf,
 }
 
 impl TXOutput {
-    pub fn can_be_unlocked_with(&self, unlocking_data: &String) -> bool {
-        self.script_pk == *unlocking_data
+    pub fn is_locked_with(&self, pub_key_hash: &ByteBuf) -> bool {
+        self.pub_key_hash == *pub_key_hash
+    }
+
+    pub fn lock(&mut self, address: &ByteBuf) {
+        let pub_key_hash = bs58::decode(address)
+            .with_alphabet(bs58::Alphabet::BITCOIN)
+            .into_vec()
+            .expect("Address could not be decoded to base58!");
+        let pub_key_hash =
+            ByteBuf::from(&pub_key_hash[1..pub_key_hash.len() - Wallet::CHECKSUM_LEN]);
+
+        self.pub_key_hash = pub_key_hash;
     }
 }

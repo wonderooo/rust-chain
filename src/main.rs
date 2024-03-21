@@ -1,8 +1,13 @@
 use std::fmt::Display;
 
 use clap::Parser;
-use rust_chain::{blockchain::Blockchain, wallet::Wallet, Blockchainable};
+use rust_chain::{
+    blockchain::Blockchain,
+    wallet::{Wallet, Wallets},
+    Blockchainable,
+};
 use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Data {
@@ -39,10 +44,6 @@ struct ArgGroup {
     #[arg(short, long)]
     create_blockchain: Option<String>,
 
-    /// Add block to blockchain with provided content
-    // #[arg(short, long)]
-    // add_block: Option<String>,
-
     /// Print all blocks in blockchain
     #[arg(short, long)]
     print: bool,
@@ -62,6 +63,14 @@ struct ArgGroup {
     /// Get an valid bitcoin address
     #[arg(short, long)]
     address: bool,
+
+    /// Create a wallet and save to file
+    #[arg(short, long)]
+    create_wallet: bool,
+
+    /// Prints all wallets fetched from file
+    #[arg(short, long)]
+    print_wallets: bool,
 }
 
 fn main() {
@@ -86,8 +95,8 @@ fn main() {
 
     if let Some(addr) = args.group.balance {
         let mut blockchain = Blockchain::<Data>::new(&"".to_string());
-        let balance = blockchain.balance_at(&addr);
-        println!("Balance at {}: {}", &addr, balance);
+        let balance = blockchain.balance_at(&ByteBuf::from(addr.clone()));
+        println!("Balance at {}: {}", addr, balance);
     }
 
     if let Some(v) = args.group.send {
@@ -106,5 +115,15 @@ fn main() {
             "{}",
             std::str::from_utf8(&address).expect("Could not create string address!")
         );
+    }
+
+    if args.group.create_wallet {
+        let wallet = Wallet::new();
+        Wallets::save_wallet(&wallet);
+    }
+
+    if args.group.print_wallets {
+        let wallets = Wallets::fetch_wallets();
+        println!("{}", wallets)
     }
 }
